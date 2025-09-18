@@ -671,16 +671,26 @@ async def check_availability(service, params):
         # Parse datetime
         start_datetime = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
         end_datetime = datetime.strptime(f"{date} {end_time}", "%Y-%m-%d %H:%M")
+        logger.info(f"Parsed datetimes: start={start_datetime}, end={end_datetime}")
         
         # Get existing events
         calendar_id = get_calendar_id()
+        logger.info(f"Using calendar_id: {calendar_id}")
+        
+        # Format times for Google Calendar API (ISO format with timezone)
+        time_min = start_datetime.isoformat() + 'Z'
+        time_max = end_datetime.isoformat() + 'Z'
+        logger.info(f"API call: timeMin={time_min}, timeMax={time_max}")
+        
         events_result = service.events().list(
             calendarId=calendar_id,
-            timeMin=start_datetime.isoformat() + 'Z',
-            timeMax=end_datetime.isoformat() + 'Z',
+            timeMin=time_min,
+            timeMax=time_max,
             singleEvents=True,
             orderBy='startTime'
         ).execute()
+        
+        logger.info(f"Google Calendar API call successful, got {len(events_result.get('items', []))} events")
         
         events = events_result.get('items', [])
         
