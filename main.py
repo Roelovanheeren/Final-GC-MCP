@@ -575,31 +575,70 @@ async def call_tool(request: dict):
         
         # Handle MCP format
         if "jsonrpc" in request and "method" in request:
-            tool_name = request["method"]
+            method = request["method"]
             params = request.get("params", {})
             request_id = request.get("id", 1)
             
-            # Route to appropriate tool handler
-            if tool_name == "check_availability":
-                result = await check_availability(service, params)
-            elif tool_name == "book_appointment":
-                result = await book_appointment(service, params)
-            elif tool_name == "cancel_appointment":
-                result = await cancel_appointment(service, params)
-            elif tool_name == "reschedule_appointment":
-                result = await reschedule_appointment(service, params)
-            elif tool_name == "get_appointments":
-                result = await get_appointments(service, params)
-            elif tool_name == "find_next_available":
-                result = await find_next_available(service, params)
-            else:
-                raise HTTPException(status_code=400, detail=f"Unknown tool: {tool_name}")
+            logger.info(f"MCP method in /tools: {method}")
             
-            return {
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "result": {"content": [{"type": "text", "text": result}]}
-            }
+            # Handle MCP initialization in /tools endpoint
+            if method == "initialize":
+                logger.info("Handling initialize in /tools endpoint")
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {
+                            "tools": {}
+                        },
+                        "serverInfo": {
+                            "name": "Google Calendar MCP Server",
+                            "version": "1.0.0"
+                        }
+                    }
+                }
+            
+            # Handle tools/list request
+            elif method == "tools/list":
+                logger.info("Returning tools list")
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {
+                        "tools": MCP_TOOLS
+                    }
+                }
+            
+            # Handle actual tool calls
+            elif method.startswith("tools/call") or method in ["check_availability", "book_appointment", "cancel_appointment", "reschedule_appointment", "get_appointments", "find_next_available"]:
+                tool_name = method.replace("tools/call/", "") if method.startswith("tools/call") else method
+                logger.info(f"Executing tool: {tool_name} with params: {params}")
+                
+                if tool_name == "check_availability":
+                    result = await check_availability(service, params)
+                elif tool_name == "book_appointment":
+                    result = await book_appointment(service, params)
+                elif tool_name == "cancel_appointment":
+                    result = await cancel_appointment(service, params)
+                elif tool_name == "reschedule_appointment":
+                    result = await reschedule_appointment(service, params)
+                elif tool_name == "get_appointments":
+                    result = await get_appointments(service, params)
+                elif tool_name == "find_next_available":
+                    result = await find_next_available(service, params)
+                else:
+                    raise HTTPException(status_code=400, detail=f"Unknown tool: {tool_name}")
+                
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {"content": [{"type": "text", "text": result}]}
+                }
+            
+            else:
+                logger.warning(f"Unknown MCP method: {method}")
+                raise HTTPException(status_code=400, detail=f"Unknown method: {method}")
         
         # Handle ElevenLabs format (tool_calls array)
         elif "tool_calls" in request:
