@@ -13,9 +13,9 @@ from dataclasses import dataclass
 import io
 import base64
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 import uvicorn
 import requests
@@ -194,7 +194,7 @@ def get_calendar_id():
 @app.get("/")
 async def root():
     """Root endpoint - MCP server info for ElevenLabs compatibility"""
-    return {
+    response_data = {
         "jsonrpc": "2.0",
         "result": {
             "protocolVersion": "2024-11-05",
@@ -207,6 +207,18 @@ async def root():
             }
         }
     }
+    
+    return JSONResponse(
+        content=response_data,
+        headers={
+            "Content-Type": "application/json",
+            "X-MCP-Version": "2024-11-05",
+            "X-Server-Name": "Google Calendar MCP Server",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*"
+        }
+    )
 
 @app.post("/")
 async def root_post(request: dict):
@@ -264,7 +276,7 @@ async def root_post(request: dict):
     
     # Default response - include tools for ElevenLabs
     logger.info("Returning default response with tools")
-    return {
+    response_data = {
         "jsonrpc": "2.0",
         "id": request.get("id", 1),
         "result": {
@@ -279,6 +291,34 @@ async def root_post(request: dict):
             "tools": MCP_TOOLS
         }
     }
+    
+    return JSONResponse(
+        content=response_data,
+        headers={
+            "Content-Type": "application/json",
+            "X-MCP-Version": "2024-11-05",
+            "X-Server-Name": "Google Calendar MCP Server",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "*"
+        }
+        )
+
+@app.options("/")
+@app.options("/mcp")
+@app.options("/mcp/tools")
+@app.options("/tools")
+async def options_handler():
+    """Handle CORS preflight requests"""
+    return JSONResponse(
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS, HEAD",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "86400"
+        }
+    )
 
 @app.get("/health")
 async def health():
@@ -363,7 +403,7 @@ async def mcp_post(request: dict):
     else:
         # Default: return both server info and tools
         logger.info("Returning combined response")
-        return {
+        response_data = {
             "jsonrpc": "2.0",
             "id": request.get("id", 1),
             "result": {
@@ -378,6 +418,18 @@ async def mcp_post(request: dict):
                 "tools": MCP_TOOLS
             }
         }
+        
+        return JSONResponse(
+            content=response_data,
+            headers={
+                "Content-Type": "application/json",
+                "X-MCP-Version": "2024-11-05",
+                "X-Server-Name": "Google Calendar MCP Server",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
 
 @app.get("/mcp/info")
 async def mcp_info_alt():
