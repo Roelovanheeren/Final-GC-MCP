@@ -710,6 +710,10 @@ async def check_availability(service, params):
                "\n".join([f"- {slot['time']}" for slot in available_slots])
                
     except Exception as e:
+        logger.error(f"check_availability ERROR: {type(e).__name__}: {str(e)}")
+        logger.error(f"Full error details: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to check availability: {e}")
 
 async def book_appointment(service, params):
