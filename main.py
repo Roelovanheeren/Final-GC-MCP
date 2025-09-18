@@ -75,16 +75,14 @@ class MCPError(BaseModel):
 MCP_TOOLS = [
     {
         "name": "check_availability",
-        "description": "Check available appointment slots for a specific date and time range",
+        "description": "Check available appointment slots for a specific date during business hours (9 AM - 5 PM Amsterdam time)",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "date": {"type": "string", "description": "Date to check (YYYY-MM-DD)"},
-                "start_time": {"type": "string", "description": "Start time (HH:MM)"},
-                "end_time": {"type": "string", "description": "End time (HH:MM)"},
                 "duration": {"type": "integer", "description": "Appointment duration in minutes", "default": 60}
             },
-            "required": ["date", "start_time", "end_time"]
+            "required": ["date"]
         },
     },
     {
@@ -718,14 +716,17 @@ async def call_tool(request: dict):
 
 # Tool implementations
 async def check_availability(service, params):
-    """Check available appointment slots"""
+    """Check available appointment slots during business hours (9 AM - 5 PM)"""
     try:
         logger.info(f"check_availability called with params: {params}")
         date = params['date']
-        start_time = params['start_time']
-        end_time = params['end_time']
         duration = params.get('duration', 60)
-        logger.info(f"Parsed: date={date}, start_time={start_time}, end_time={end_time}, duration={duration}")
+        
+        # Business hours: 9 AM to 5 PM
+        start_time = "09:00"
+        end_time = "17:00"
+        
+        logger.info(f"Using business hours: date={date}, start_time={start_time}, end_time={end_time}, duration={duration}")
         
         # Parse datetime
         start_datetime = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
@@ -778,8 +779,11 @@ async def check_availability(service, params):
             
             current_time += timedelta(minutes=30)  # Check every 30 minutes
         
-        return f"Available {duration}-minute slots on {date}: {len(available_slots)} slots found\n" + \
-               "\n".join([f"- {slot['time']}" for slot in available_slots])
+        if available_slots:
+            return f"Available {duration}-minute slots on {date} (business hours 9 AM - 5 PM): {len(available_slots)} slots found\n" + \
+                   "\n".join([f"- {slot['time']}" for slot in available_slots])
+        else:
+            return f"No available {duration}-minute slots on {date} during business hours (9 AM - 5 PM)"
                
     except Exception as e:
         logger.error(f"check_availability ERROR: {type(e).__name__}: {str(e)}")
