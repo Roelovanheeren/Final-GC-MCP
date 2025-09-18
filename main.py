@@ -226,6 +226,16 @@ async def list_elevenlabs_tools():
         "tools": MCP_TOOLS
     }
 
+@app.get("/elevenlabs/webhook")
+async def elevenlabs_webhook_info():
+    """ElevenLabs webhook endpoint info (for verification)"""
+    return {
+        "status": "ready",
+        "webhook_url": "/elevenlabs/webhook",
+        "method": "POST",
+        "description": "ElevenLabs webhook endpoint for agent tool calls"
+    }
+
 @app.post("/elevenlabs/webhook")
 async def elevenlabs_webhook(request: dict):
     """ElevenLabs webhook endpoint for agent tool calls"""
