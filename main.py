@@ -208,6 +208,24 @@ async def status():
         "timestamp": datetime.now().isoformat()
     }
 
+@app.get("/mcp")
+async def mcp_info():
+    """MCP server information endpoint"""
+    return {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {
+                "tools": {}
+            },
+            "serverInfo": {
+                "name": "Google Calendar MCP Server",
+                "version": "1.0.0"
+            }
+        }
+    }
+
 @app.get("/tools")
 async def list_tools():
     """List available tools - returns OpenAI function format for ElevenLabs"""
@@ -236,6 +254,11 @@ async def list_mcp_tools():
             "tools": MCP_TOOLS
         }
     }
+
+@app.post("/mcp/tools")
+async def call_mcp_tool(request: dict):
+    """Execute MCP tool calls via /mcp/tools endpoint"""
+    return await call_tool(request)
 
 @app.get("/elevenlabs/tools")
 async def list_elevenlabs_tools():
