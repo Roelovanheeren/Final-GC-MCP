@@ -658,10 +658,12 @@ async def call_tool(request: dict):
 async def check_availability(service, params):
     """Check available appointment slots"""
     try:
+        logger.info(f"check_availability called with params: {params}")
         date = params['date']
         start_time = params['start_time']
         end_time = params['end_time']
         duration = params.get('duration', 60)
+        logger.info(f"Parsed: date={date}, start_time={start_time}, end_time={end_time}, duration={duration}")
         
         # Parse datetime
         start_datetime = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
