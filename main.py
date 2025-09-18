@@ -10,11 +10,15 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
+import io
+import base64
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import uvicorn
+import requests
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -27,12 +31,16 @@ logger = logging.getLogger(__name__)
 # FastAPI app
 app = FastAPI(title="Google Calendar MCP Server", version="1.0.0")
 
-# CORS middleware
+# CORS middleware - Updated for ElevenLabs integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "*",  # Allow all origins for development
+        "https://api.elevenlabs.io",
+        "https://elevenlabs.io"
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -134,7 +142,7 @@ MCP_TOOLS = [
                 "days_ahead": {"type": "integer", "description": "How many days to search ahead", "default": 30}
             }
         }
-    }
+    },
 ]
 
 def get_calendar_service():
@@ -171,6 +179,7 @@ def get_calendar_service():
 def get_calendar_id():
     """Get the calendar ID from environment"""
     return os.environ.get('GOOGLE_CALENDAR_ID', 'primary')
+
 
 @app.get("/")
 async def root():
@@ -209,6 +218,77 @@ async def list_tools():
             "tools": MCP_TOOLS
         }
     }
+
+@app.get("/elevenlabs/tools")
+async def list_elevenlabs_tools():
+    """List tools in ElevenLabs format"""
+    return {
+        "tools": MCP_TOOLS
+    }
+
+@app.post("/elevenlabs/webhook")
+async def elevenlabs_webhook(request: dict):
+    """ElevenLabs webhook endpoint for agent tool calls"""
+    try:
+        logger.info(f"Received ElevenLabs webhook: {request}")
+        
+        # Extract tool call from ElevenLabs request
+        if "tool_calls" not in request:
+            raise HTTPException(status_code=400, detail="No tool_calls in request")
+        
+        tool_calls = request["tool_calls"]
+        results = []
+        
+        for tool_call in tool_calls:
+            tool_name = tool_call.get("function", {}).get("name")
+            tool_params = tool_call.get("function", {}).get("arguments", {})
+            
+            if not tool_name:
+                continue
+                
+            # Get calendar service
+            service = get_calendar_service()
+            if not service:
+                results.append({
+                    "tool_call_id": tool_call.get("id"),
+                    "error": "Google Calendar service not available"
+                })
+                continue
+            
+            # Route to appropriate tool handler
+            try:
+                if tool_name == "check_availability":
+                    result = await check_availability(service, tool_params)
+                elif tool_name == "book_appointment":
+                    result = await book_appointment(service, tool_params)
+                elif tool_name == "cancel_appointment":
+                    result = await cancel_appointment(service, tool_params)
+                elif tool_name == "reschedule_appointment":
+                    result = await reschedule_appointment(service, tool_params)
+                elif tool_name == "get_appointments":
+                    result = await get_appointments(service, tool_params)
+                elif tool_name == "find_next_available":
+                    result = await find_next_available(service, tool_params)
+                else:
+                    result = f"Unknown tool: {tool_name}"
+                
+                results.append({
+                    "tool_call_id": tool_call.get("id"),
+                    "result": result
+                })
+                
+            except Exception as e:
+                logger.error(f"Tool execution failed: {e}")
+                results.append({
+                    "tool_call_id": tool_call.get("id"),
+                    "error": str(e)
+                })
+        
+        return {"results": results}
+        
+    except Exception as e:
+        logger.error(f"Webhook processing failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/tools")
 async def call_tool(request: MCPRequest):
