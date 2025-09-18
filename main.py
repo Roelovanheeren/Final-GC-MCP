@@ -583,7 +583,7 @@ async def call_tool(request: dict):
             
             # Handle MCP initialization in /tools endpoint
             if method == "initialize":
-                logger.info("Handling initialize in /tools endpoint")
+                logger.info("Handling initialize in /tools endpoint - including tools in response")
                 return {
                     "jsonrpc": "2.0",
                     "id": request_id,
@@ -595,19 +595,29 @@ async def call_tool(request: dict):
                         "serverInfo": {
                             "name": "Google Calendar MCP Server",
                             "version": "1.0.0"
-                        }
+                        },
+                        "tools": MCP_TOOLS
                     }
                 }
             
             # Handle tools/list request
             elif method == "tools/list":
-                logger.info("Returning tools list")
+                logger.info("Returning tools list for ElevenLabs")
                 return {
                     "jsonrpc": "2.0",
                     "id": request_id,
                     "result": {
                         "tools": MCP_TOOLS
                     }
+                }
+            
+            # Handle notifications/initialized
+            elif method == "notifications/initialized":
+                logger.info("Handling notifications/initialized in /tools")
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {}
                 }
             
             # Handle actual tool calls
@@ -638,6 +648,16 @@ async def call_tool(request: dict):
             
             else:
                 logger.warning(f"Unknown MCP method: {method}")
+                # Try to trigger tools/list if this might be a tool discovery request
+                if method == "get_capabilities" or "tool" in method.lower():
+                    logger.info("Possible tool discovery request - returning tools list")
+                    return {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "result": {
+                            "tools": MCP_TOOLS
+                        }
+                    }
                 raise HTTPException(status_code=400, detail=f"Unknown method: {method}")
         
         # Handle ElevenLabs format (tool_calls array)
