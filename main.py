@@ -61,7 +61,7 @@ class MCPError(BaseModel):
     code: int
     message: str
 
-# Tool definitions
+# Tool definitions - compatible with both MCP and ElevenLabs
 MCP_TOOLS = [
     {
         "name": "check_availability",
@@ -75,7 +75,7 @@ MCP_TOOLS = [
                 "duration": {"type": "integer", "description": "Appointment duration in minutes", "default": 60}
             },
             "required": ["date", "start_time", "end_time"]
-        }
+        },
     },
     {
         "name": "book_appointment",
@@ -210,7 +210,25 @@ async def status():
 
 @app.get("/tools")
 async def list_tools():
-    """List available MCP tools"""
+    """List available tools - returns OpenAI function format for ElevenLabs"""
+    # Convert MCP tools to OpenAI function format
+    openai_tools = []
+    for tool in MCP_TOOLS:
+        openai_tool = {
+            "type": "function",
+            "function": {
+                "name": tool["name"],
+                "description": tool["description"],
+                "parameters": tool["inputSchema"]
+            }
+        }
+        openai_tools.append(openai_tool)
+    
+    return openai_tools
+
+@app.get("/mcp/tools")
+async def list_mcp_tools():
+    """List available MCP tools in proper MCP format"""
     return {
         "jsonrpc": "2.0",
         "id": 1,
@@ -301,43 +319,95 @@ async def elevenlabs_webhook(request: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/tools")
-async def call_tool(request: MCPRequest):
-    """Execute MCP tool calls"""
+async def call_tool(request: dict):
+    """Execute tool calls - handles both MCP and ElevenLabs formats"""
     try:
+        logger.info(f"Received tool call request: {request}")
+        
         service = get_calendar_service()
         if not service:
             raise HTTPException(status_code=500, detail="Google Calendar service not available")
         
-        tool_name = request.method
-        params = request.params or {}
+        # Handle MCP format
+        if "jsonrpc" in request and "method" in request:
+            tool_name = request["method"]
+            params = request.get("params", {})
+            request_id = request.get("id", 1)
+            
+            # Route to appropriate tool handler
+            if tool_name == "check_availability":
+                result = await check_availability(service, params)
+            elif tool_name == "book_appointment":
+                result = await book_appointment(service, params)
+            elif tool_name == "cancel_appointment":
+                result = await cancel_appointment(service, params)
+            elif tool_name == "reschedule_appointment":
+                result = await reschedule_appointment(service, params)
+            elif tool_name == "get_appointments":
+                result = await get_appointments(service, params)
+            elif tool_name == "find_next_available":
+                result = await find_next_available(service, params)
+            else:
+                raise HTTPException(status_code=400, detail=f"Unknown tool: {tool_name}")
+            
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {"content": [{"type": "text", "text": result}]}
+            }
         
-        # Route to appropriate tool handler
-        if tool_name == "check_availability":
-            result = await check_availability(service, params)
-        elif tool_name == "book_appointment":
-            result = await book_appointment(service, params)
-        elif tool_name == "cancel_appointment":
-            result = await cancel_appointment(service, params)
-        elif tool_name == "reschedule_appointment":
-            result = await reschedule_appointment(service, params)
-        elif tool_name == "get_appointments":
-            result = await get_appointments(service, params)
-        elif tool_name == "find_next_available":
-            result = await find_next_available(service, params)
+        # Handle ElevenLabs format (tool_calls array)
+        elif "tool_calls" in request:
+            tool_calls = request["tool_calls"]
+            results = []
+            
+            for tool_call in tool_calls:
+                tool_name = tool_call.get("function", {}).get("name")
+                tool_params = tool_call.get("function", {}).get("arguments", {})
+                
+                if not tool_name:
+                    continue
+                
+                try:
+                    if tool_name == "check_availability":
+                        result = await check_availability(service, tool_params)
+                    elif tool_name == "book_appointment":
+                        result = await book_appointment(service, tool_params)
+                    elif tool_name == "cancel_appointment":
+                        result = await cancel_appointment(service, tool_params)
+                    elif tool_name == "reschedule_appointment":
+                        result = await reschedule_appointment(service, tool_params)
+                    elif tool_name == "get_appointments":
+                        result = await get_appointments(service, tool_params)
+                    elif tool_name == "find_next_available":
+                        result = await find_next_available(service, tool_params)
+                    else:
+                        result = f"Unknown tool: {tool_name}"
+                    
+                    results.append({
+                        "tool_call_id": tool_call.get("id"),
+                        "result": result
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Tool execution failed: {e}")
+                    results.append({
+                        "tool_call_id": tool_call.get("id"),
+                        "error": str(e)
+                    })
+            
+            return {"results": results}
+        
         else:
-            raise HTTPException(status_code=400, detail=f"Unknown tool: {tool_name}")
-        
-        return MCPResponse(
-            id=request.id,
-            result={"content": [{"type": "text", "text": result}]}
-        )
+            raise HTTPException(status_code=400, detail="Invalid request format")
         
     except Exception as e:
         logger.error(f"Tool execution failed: {e}")
-        return MCPResponse(
-            id=request.id,
-            error={"code": -32603, "message": str(e)}
-        )
+        return {
+            "jsonrpc": "2.0", 
+            "id": request.get("id", 1),
+            "error": {"code": -32603, "message": str(e)}
+        }
 
 # Tool implementations
 async def check_availability(service, params):
