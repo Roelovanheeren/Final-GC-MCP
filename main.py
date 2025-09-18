@@ -212,9 +212,25 @@ async def root():
 async def root_post(request: dict):
     """Root endpoint POST handler for MCP requests"""
     logger.info(f"Received root POST request: {request}")
+    logger.info(f"Request keys: {list(request.keys()) if request else 'No request'}")
+    
+    # ElevenLabs might expect a direct tools list response
+    if not request or request == {}:
+        logger.info("Empty request at root - returning tools list")
+        return {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "tools": MCP_TOOLS
+            }
+        }
+    
+    method = request.get("method", "")
+    logger.info(f"Root method: {method}")
     
     # Handle MCP initialization request
-    if request.get("method") == "initialize":
+    if method == "initialize":
+        logger.info("Returning initialization response")
         return {
             "jsonrpc": "2.0",
             "id": request.get("id", 1),
@@ -231,7 +247,8 @@ async def root_post(request: dict):
         }
     
     # Handle tool list requests
-    elif request.get("method") == "tools/list":
+    elif method == "tools/list" or method == "list_tools":
+        logger.info("Returning tools list")
         return {
             "jsonrpc": "2.0",
             "id": request.get("id", 1),
@@ -241,10 +258,12 @@ async def root_post(request: dict):
         }
     
     # Handle tool calls
-    elif request.get("method") == "tools/call":
+    elif method == "tools/call":
+        logger.info("Handling tool call")
         return await call_tool(request)
     
-    # Default response
+    # Default response - include tools for ElevenLabs
+    logger.info("Returning default response with tools")
     return {
         "jsonrpc": "2.0",
         "id": request.get("id", 1),
@@ -256,7 +275,8 @@ async def root_post(request: dict):
             "serverInfo": {
                 "name": "Google Calendar MCP Server",
                 "version": "1.0.0"
-            }
+            },
+            "tools": MCP_TOOLS
         }
     }
 
@@ -299,7 +319,65 @@ async def mcp_info():
 async def mcp_post(request: dict):
     """MCP endpoint POST handler for MCP requests"""
     logger.info(f"Received MCP POST request: {request}")
-    return await root_post(request)
+    
+    # ElevenLabs might expect a direct tools list response
+    if not request or request == {}:
+        logger.info("Empty request - returning tools list")
+        return {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "tools": MCP_TOOLS
+            }
+        }
+    
+    # Check if ElevenLabs is asking for capabilities
+    method = request.get("method", "")
+    logger.info(f"MCP method: {method}")
+    
+    if method == "tools/list" or method == "list_tools":
+        logger.info("Returning tools list")
+        return {
+            "jsonrpc": "2.0",
+            "id": request.get("id", 1),
+            "result": {
+                "tools": MCP_TOOLS
+            }
+        }
+    elif method == "initialize" or method == "init":
+        logger.info("Returning initialization response")
+        return {
+            "jsonrpc": "2.0",
+            "id": request.get("id", 1),
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "tools": {}
+                },
+                "serverInfo": {
+                    "name": "Google Calendar MCP Server",
+                    "version": "1.0.0"
+                }
+            }
+        }
+    else:
+        # Default: return both server info and tools
+        logger.info("Returning combined response")
+        return {
+            "jsonrpc": "2.0",
+            "id": request.get("id", 1),
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "tools": {}
+                },
+                "serverInfo": {
+                    "name": "Google Calendar MCP Server",
+                    "version": "1.0.0"
+                },
+                "tools": MCP_TOOLS
+            }
+        }
 
 @app.get("/mcp/info")
 async def mcp_info_alt():
