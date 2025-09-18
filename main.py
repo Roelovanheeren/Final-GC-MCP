@@ -636,9 +636,12 @@ async def call_tool(request: dict):
                     
                 except Exception as e:
                     logger.error(f"Tool execution failed: {e}")
+                    import traceback
+                    error_details = f"{type(e).__name__}: {str(e)}\nTraceback: {traceback.format_exc()}"
+                    logger.error(f"Full error details: {error_details}")
                     results.append({
                         "tool_call_id": tool_call.get("id"),
-                        "error": str(e)
+                        "error": error_details
                     })
             
             return {"results": results}
