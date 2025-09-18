@@ -31,17 +31,27 @@ logger = logging.getLogger(__name__)
 # FastAPI app
 app = FastAPI(title="Google Calendar MCP Server", version="1.0.0")
 
-# CORS middleware - Updated for ElevenLabs integration
+# CORS middleware - Comprehensive for ElevenLabs MCP integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "*",  # Allow all origins for development
-        "https://api.elevenlabs.io",
-        "https://elevenlabs.io"
-    ],
+    allow_origins=["*"],  # Allow all origins for maximum compatibility
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"],
+    allow_headers=[
+        "*",
+        "Content-Type",
+        "Authorization", 
+        "X-Requested-With",
+        "Accept",
+        "Origin",
+        "User-Agent",
+        "DNT",
+        "Cache-Control",
+        "X-Mx-ReqToken",
+        "Keep-Alive",
+        "X-CSRFToken"
+    ],
+    expose_headers=["*"]
 )
 
 # MCP Request/Response Models
@@ -183,12 +193,71 @@ def get_calendar_id():
 
 @app.get("/")
 async def root():
-    """Root endpoint"""
+    """Root endpoint - MCP server info for ElevenLabs compatibility"""
     return {
-        "status": "ok",
-        "service": "Google Calendar MCP Server",
-        "version": "1.0.0",
-        "timestamp": datetime.now().isoformat()
+        "jsonrpc": "2.0",
+        "result": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {
+                "tools": {}
+            },
+            "serverInfo": {
+                "name": "Google Calendar MCP Server",
+                "version": "1.0.0"
+            }
+        }
+    }
+
+@app.post("/")
+async def root_post(request: dict):
+    """Root endpoint POST handler for MCP requests"""
+    logger.info(f"Received root POST request: {request}")
+    
+    # Handle MCP initialization request
+    if request.get("method") == "initialize":
+        return {
+            "jsonrpc": "2.0",
+            "id": request.get("id", 1),
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "tools": {}
+                },
+                "serverInfo": {
+                    "name": "Google Calendar MCP Server",
+                    "version": "1.0.0"
+                }
+            }
+        }
+    
+    # Handle tool list requests
+    elif request.get("method") == "tools/list":
+        return {
+            "jsonrpc": "2.0",
+            "id": request.get("id", 1),
+            "result": {
+                "tools": MCP_TOOLS
+            }
+        }
+    
+    # Handle tool calls
+    elif request.get("method") == "tools/call":
+        return await call_tool(request)
+    
+    # Default response
+    return {
+        "jsonrpc": "2.0",
+        "id": request.get("id", 1),
+        "result": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {
+                "tools": {}
+            },
+            "serverInfo": {
+                "name": "Google Calendar MCP Server",
+                "version": "1.0.0"
+            }
+        }
     }
 
 @app.get("/health")
@@ -214,6 +283,29 @@ async def mcp_info():
     return {
         "jsonrpc": "2.0",
         "id": 1,
+        "result": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {
+                "tools": {}
+            },
+            "serverInfo": {
+                "name": "Google Calendar MCP Server",
+                "version": "1.0.0"
+            }
+        }
+    }
+
+@app.post("/mcp")
+async def mcp_post(request: dict):
+    """MCP endpoint POST handler for MCP requests"""
+    logger.info(f"Received MCP POST request: {request}")
+    return await root_post(request)
+
+@app.get("/mcp/info")
+async def mcp_info_alt():
+    """Alternative MCP info endpoint for compatibility"""
+    return {
+        "jsonrpc": "2.0",
         "result": {
             "protocolVersion": "2024-11-05",
             "capabilities": {
